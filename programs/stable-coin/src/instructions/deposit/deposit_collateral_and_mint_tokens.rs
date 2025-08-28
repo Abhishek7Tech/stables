@@ -1,9 +1,11 @@
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use pyth_solana_receiver_sdk::price_update::PriceUpdateV2;
 
 use crate::constants::{SEED_COLLATERAL_ACCOUNT, SEED_CONFIG_ACCOUNT, SEED_SOL_ACCOUNT};
 use crate::state::{Collateral, Config};
+use crate::{check_health_factor, deposit_sol_internal, mint_tokens_internal};
 
 #[derive(Accounts)]
 pub struct DepositCollateralAndMintTokens<'info> {
@@ -43,6 +45,8 @@ pub struct DepositCollateralAndMintTokens<'info> {
     )]
     pub token_account: InterfaceAccount<'info, TokenAccount>,
 
+    pub price_update: Account<'info, PriceUpdateV2>,
+
     #[account(mut)]
     pub mint_account: InterfaceAccount<'info, Mint>,
     pub token_program: Program<'info, Token2022>,
@@ -53,24 +57,40 @@ pub struct DepositCollateralAndMintTokens<'info> {
 pub fn process_deposit_collateral_and_mint_tokens(
     ctx: Context<DepositCollateralAndMintTokens>,
     amount_collateral: u64,
-    amount_to_mint: u64
+    amount_to_mint: u64,
 ) -> Result<()> {
+    let collateral_account = &mut ctx.accounts.collateral_account;
+    let config_account = &mut ctx.accounts.config_account;
+    let price_update = &mut ctx.accounts.price_update;
 
-let collateral_account = &mut ctx.accounts.collateral_account;
+    collateral_account.lamport_balance = ctx.accounts.sol_account.lamports() + amount_collateral;
+    collateral_account.amount_minted += amount_to_mint;
 
-collateral_account.lamport_balance = ctx.accounts.sol_account.lamports() + amount_collateral;
-collateral_account.amount_minted += amount_to_mint;
+    if !collateral_account.is_initialized {
+        collateral_account.is_initialized = true;
+        collateral_account.bump = ctx.bumps.collateral_account;
+        collateral_account.bump_sol_account = ctx.bumps.sol_account;
+        collateral_account.depositor = ctx.accounts.depositor.key();
+        collateral_account.token_account = ctx.accounts.token_account.key();
+        collateral_account.sol_account = ctx.accounts.sol_account.key();
+    }
 
-if !collateral_account.is_initialized {
-    collateral_account.is_initialized = true;
-    collateral_account.bump = ctx.bumps.collateral_account;
-    collateral_account.bump_sol_account = ctx.bumps.sol_account;
-    collateral_account.depositor = ctx.accounts.depositor.key();
-    collateral_account.token_account = ctx.accounts.token_account.key();
-    collateral_account.sol_account = ctx.accounts.sol_account.key();
-} 
+    check_health_factor(&collateral_account, &config_account, &price_update)?;
 
+    deposit_sol_internal(
+        &ctx.accounts.depositor,
+        &ctx.accounts.sol_account,
+        &ctx.accounts.system_program,
+        amount_collateral,
+    )?;
 
+    mint_tokens_internal(
+        &ctx.accounts.mint_account,
+        &ctx.accounts.token_account,
+        &ctx.accounts.token_program,
+        ctx.accounts.config_account.bump_mint_account,
+        amount_to_mint,
+    )?;
 
-Ok(())
+    Ok(())
 }

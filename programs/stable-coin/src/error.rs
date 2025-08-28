@@ -5,4 +5,7 @@ pub enum CustomError {
     #[msg("Invalid price")]
     InvalidPrice,
 
+    #[msg("Below minimum health factor")]
+    BelowMinimumHealthFactor
+
 }

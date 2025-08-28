@@ -20,6 +20,9 @@ pub mod stable_coin {
         process_update_config(ctx, health_factor)
     }
 
+    pub fn deposit_collateral_and_mint_tokens(ctx: Context<DepositCollateralAndMintTokens>, amount_collateral: u64, amount_to_mint: u64) -> Result<()> {
+        process_deposit_collateral_and_mint_tokens(ctx, amount_collateral, amount_to_mint)
+    }
    
 }
 
