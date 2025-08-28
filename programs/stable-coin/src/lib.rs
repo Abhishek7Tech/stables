@@ -3,6 +3,7 @@ mod state;
 mod instructions;
 pub use instructions::*;
 mod constants;
+mod error;
 declare_id!("ED7eNUqcLMZJMSVNFaTmb5qMxehDTe7iCfmZy48h8AZc");
 
 #[program]
